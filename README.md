@@ -23,6 +23,42 @@ To verify a mutant:
 python src/main.py --original benchmarks/sample_p.py --mutant benchmarks/sample_m.py
 ```
 
+## 🧪 Testing
+The testing suite ensures the integrity of the NSEV neuro-symbolic pipeline, focusing on both structural analysis and the self-correction logic.
+
+#### 1. Run All Tests
+To execute all unit tests within the project, use the following command:
+
+```bash
+python3 -m unittest discover tests
+```
+
+#### 2. Specific Module Testing
+You can verify individual phases of the framework by running specific test files:
+
+Refinement Engine (Phase 8): Validates the Self-Correction Loop and CEGAR logic.
+
+```bash
+python3 -m unittest tests/test_refinement.py
+```
+
+
+Structural Analyzer (Phases 2-5 & 7): Ensures correct identification of loops, branches, and function inlining strategies.
+
+```bash
+python3 -m unittest tests/test_analyzer.py
+```
+
+#### 3. Execution Verification
+The test suite validates critical behaviors including:
+
+Syntax Refinement (Phase 8.1): Detecting Z3 syntax errors and generating fix prompts.
+
+Semantic Strengthening (Phase 8.2): Integrating counter-examples into refined prompts.
+
+Selective Inlining (Phase 5): Accurate categorization of function calls into Inlining or Abstraction.
+
+
 ## 📊 Experimental Results
 NSEV achieves 100% accuracy on complex mutations with an average verification time of **< 2s**.
 
