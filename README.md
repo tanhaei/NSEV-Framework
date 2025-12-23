@@ -11,8 +11,8 @@ Our framework implements an 8-phase pipeline for automated program equivalence c
 
 ## 🛠 Installation
 ```bash
-git clone https://github.com/yourusername/NSEV.git
-cd NSEV
+git clone https://github.com/tanhaei/NSEV-Framework.git
+cd NSEV-Framework
 pip install -r requirements.txt
 ```
 
