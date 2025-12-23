@@ -1,0 +1,6 @@
+z3-solver==4.12.2
+openai>=1.0.0
+anthropic
+python-dotenv
+tqdm
+pytest
