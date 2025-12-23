@@ -16,16 +16,17 @@ cd NSEV
 pip install -r requirements.txt
 ```
 
-##💻 Usage
+## 💻 Usage
 To verify a mutant:
+
 ```bash
 python src/main.py --original benchmarks/sample_p.py --mutant benchmarks/sample_m.py
 ```
 
-##📊 Experimental Results
+## 📊 Experimental Results
 NSEV achieves 100% accuracy on complex mutations with an average verification time of < 2s.
 
-##📜 Citation
+## 📜 Citation
 If you use this tool in your research, please cite:
 
 
