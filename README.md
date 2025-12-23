@@ -20,7 +20,7 @@ pip install -r requirements.txt
 To verify a mutant:
 
 ```bash
-python src/main.py --original benchmarks/sample_p.py --mutant benchmarks/sample_m.py
+python3 src/main.py --original benchmarks/sample_p.py --mutant benchmarks/sample_m.py
 ```
 
 ## 🧪 Testing
