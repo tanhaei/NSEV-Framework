@@ -1,6 +1,6 @@
 # NSEV Benchmark Suite
 
-[cite_start]This directory contains a curated set of 150 functions designed to evaluate the precision and efficiency of the **NSEV** framework[cite: 256, 257]. Each benchmark focuses on a specific challenge in formal verification and mutation testing.
+This directory contains a curated set of 150 functions designed to evaluate the precision and efficiency of the **NSEV** framework. Each benchmark focuses on a specific challenge in formal verification and mutation testing.
 
 ## 📂 Benchmark Categories
 
