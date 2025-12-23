@@ -1,59 +1,73 @@
 # src/main.py
+import argparse
 import sys
-from core.refinement import RefinementEngine
-from solvers.z3_bridge import Z3Bridge
-# Assume an LLM interface is defined to handle Phases 1-5 & 7
-from core.llm_client import NSEV_LLM_Client 
+import os
 
-def run_nsev_pipeline(original_code, mutant_code):
+# اضافه کردن مسیر جاری به sys.path برای اطمینان از شناسایی پکیج‌ها
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Clean Imports با استفاده از فایل‌های __init__.py ایجاد شده
+from core import CodeAnalyzer, NSEV_LLM_Client, RefinementEngine
+from solvers.z3_bridge import Z3Bridge
+
+def run_nsev_pipeline(orig_path, mut_path):
     """
-    Orchestrates the 8-phase verification pipeline.
+    اجرای کامل خط لوله NSEV بر اساس معماری ارائه شده در فایل arch.pdf.
     """
-    # Initialize components
+    # بارگذاری کدها
+    with open(orig_path, 'r') as f: orig_code = f.read()
+    with open(mut_path, 'r') as f: mut_code = f.read()
+
+    # ۱. تحلیل ساختاری (Phases 2-5 & 7)
+    analyzer = CodeAnalyzer(orig_code)
+    metadata = analyzer.analyze()
+    print(f"[*] Structural analysis complete: {len(metadata['loops'])} loops detected.")
+
+    # ۲. آماده‌سازی اجزای هوشمند و صوری
     llm = NSEV_LLM_Client()
     bridge = Z3Bridge()
-    refiner = RefinementEngine(max_budget=5) # Phase 8: Adaptive Budget
-    
-    # Phase 1: Initial Semantic Lifting & Ensemble Prompting
-    # This combines analysis from Phases 2-5 and 7 into a prompt
-    current_prompt = llm.generate_initial_prompt(original_code, mutant_code)
-    
-    print("--- Starting NSEV Neuro-Symbolic Pipeline ---")
-    
+    refiner = RefinementEngine(max_budget=5)
+
+    # ۳. شروع فاز ۱ (Semantic Lifting)
+    # در صورت وجود حلقه‌های تو در تو، استراتژی فاز ۳ فعال می‌شود
+    if len(metadata['loops']) > 1:
+        current_prompt = llm.generate_nested_loop_prompt(metadata['loops'], orig_code)
+    else:
+        current_prompt = llm.generate_initial_prompt(orig_code, mut_code)
+
+    print("--- Starting Neuro-Symbolic Verification Loop ---")
+
+    # ۴. حلقه اصلی تایید و پالایش (Phases 6 & 8)
     while not refiner.is_budget_exceeded():
-        print(f"Attempt {refiner.current_attempt + 1}: Generating Formal Specifications...")
+        print(f"[Attempt {refiner.current_attempt + 1}] Generating formal spec...")
         
-        # Phases 1-5 & 7: LLM generates the Z3 Python script components
-        # (Invariants, Function Summaries, and Path Conditions)
+        # Phases 1-5: دریافت مشخصات صوری از مدل زبانی
         formal_spec = llm.query_model(current_prompt)
         
-        try:
-            # Phase 6: Formal Bridge & VC Generation
-            # Translate the specs into a Verification Condition
-            verdict, model = bridge.verify(formal_spec)
-            
-            if verdict == "unsat":
-                return "✅ VERDICT: EQUIVALENT (Mathematically Proven)"
-            
-            # Phase 8: If SAT, a counter-example exists or invariant is weak
-            print("Z3 result: SAT. Triggering Refinement Loop...")
-            current_prompt = refiner.analyze_z3_feedback(solver_status="sat", model=model)
-            
-        except Exception as e:
-            # Phase 8.1: Syntax-Level Refinement
-            print(f"Z3 Error detected: {e}. Attempting self-correction...")
-            current_prompt = refiner.analyze_z3_feedback(solver_status="error", error_log=str(e))
-            
+        # Phase 6: اجرای پل صوری و دریافت نتیجه از Z3
+        status, data = bridge.verify(formal_spec)
+        
+        if status == "unsat":
+            print("✅ VERDICT: EQUIVALENT (Mathematically Proven)")
+            return
+        
+        # Phase 8: تحلیل بازخورد و شروع حلقه خوداصلاحی
+        error_log = data if status == "error" else None
+        model = data if status == "sat" else None
+        
+        current_prompt = refiner.analyze_z3_feedback(status, model=model, error_log=error_log)
+        
         if not current_prompt:
             break
+            
+        print(f"[!] Refinement triggered due to: {status}")
 
-    return "❌ VERDICT: INDETERMINATE (Refinement budget exceeded or Non-equivalent)"
+    print("❌ VERDICT: INDETERMINATE (Budget exceeded or non-equivalence found)")
 
 if __name__ == "__main__":
-    # Example usage
-    with open("benchmarks/parity_check.py", "r") as f:
-        code = f.read()
+    parser = argparse.ArgumentParser(description="NSEV: Neuro-Symbolic Equivalence Verifier")
+    parser.add_argument("--original", required=True, help="Path to original python file")
+    parser.add_argument("--mutant", required=True, help="Path to mutant python file")
     
-    # In a real scenario, you'd separate original and mutant
-    result = run_nsev_pipeline(code, code) 
-    print(result)
+    args = parser.parse_args()
+    run_nsev_pipeline(args.original, args.mutant)
