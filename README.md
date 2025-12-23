@@ -1,13 +1,13 @@
 # NSEV: Neuro-Symbolic Equivalence Verifier
 
-[cite_start]NSEV is a professional framework designed to solve the **Equivalent Mutant Problem (EMP)** by bridging the gap between LLM intuition and SMT rigor[cite: 24, 301].
+NSEV is a professional framework designed to solve the **Equivalent Mutant Problem (EMP)** by bridging the gap between LLM intuition and SMT rigor.
 
 ## 🚀 Overview
-[cite_start]Our framework implements an 8-phase pipeline for automated program equivalence checking[cite: 303]:
-1. [cite_start]**Semantic Lifting:** Extracting formal specs using Ensemble LLMs[cite: 68, 75].
-2. [cite_start]**Hierarchical Abstraction:** Handling nested loops via bottom-up induction[cite: 133].
-3. [cite_start]**Formal Bridge:** Generating Z3 Verification Conditions (VCs)[cite: 189].
-4. [cite_start]**Self-Correction:** Automated CEGAR refinement loop[cite: 234, 241].
+Our framework implements an 8-phase pipeline for automated program equivalence checking:
+1. **Semantic Lifting:** Extracting formal specs using Ensemble LLMs.
+2. **Hierarchical Abstraction:** Handling nested loops via bottom-up induction.
+3. **Formal Bridge:** Generating Z3 Verification Conditions (VCs).
+4. **Self-Correction:** Automated CEGAR refinement loop.
 
 ## 🛠 Installation
 ```bash
@@ -24,7 +24,7 @@ python src/main.py --original benchmarks/sample_p.py --mutant benchmarks/sample_
 ```
 
 ## 📊 Experimental Results
-NSEV achieves 100% accuracy on complex mutations with an average verification time of < 2s.
+NSEV achieves 100% accuracy on complex mutations with an average verification time of **< 2s**.
 
 ## 📜 Citation
 If you use this tool in your research, please cite:
