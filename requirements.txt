@@ -4,3 +4,4 @@ python-dotenv
 tabulate
 astpretty
 pytest
+setuptools<81

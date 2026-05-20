@@ -1,68 +1,59 @@
 # NSEV: Neuro-Symbolic Equivalence Verifier
 
-NSEV is a professional framework designed to solve the **Equivalent Mutant Problem (EMP)** by bridging the gap between LLM intuition and SMT rigor.
+NSEV is a research prototype for the **Equivalent Mutant Problem (EMP)**. It follows the paper's conservative neuro-symbolic design: LLMs may propose candidate semantic artefacts, but only the typed verification bridge and Z3 solver may justify a verdict.
 
-## 🚀 Overview
-Our framework implements an 8-phase pipeline for automated program equivalence checking:
-1. **Semantic Lifting:** Extracting formal specs using Ensemble LLMs.
-2. **Hierarchical Abstraction:** Handling nested loops via bottom-up induction.
-3. **Formal Bridge:** Generating Z3 Verification Conditions (VCs).
-4. **Self-Correction:** Automated CEGAR refinement loop.
+## What this repository implements
 
-## 🛠 Installation
+The offline code in this repository implements a small, testable subset of the full framework:
+
+1. **Structural analysis** for loops, branches, function calls, dynamic constructs, and bounded-concurrency flags.
+2. **Offline semantic lifting** for small Python examples, so the repository can be tested without hosted LLM access.
+3. **Formal bridge / VC execution** through `z3-solver==4.12.2.0`.
+4. **Conservative verdicts** matching the paper: `Equivalent`, `Non-equivalent`, `Equivalent under Bound`, and `Indeterminate`.
+5. **Phase 8 refinement prompts** for validation errors, UNKNOWN results, and candidate counterexamples.
+
+The full paper evaluation uses a larger mutant-level manifest and Java/Defects4J front-end. Unsupported constructs in this public prototype return `Indeterminate` rather than being silently approximated as equivalent.
+
+## Installation
+
 ```bash
-git clone https://github.com/tanhaei/NSEV-Framework.git
-cd NSEV-Framework
 pip install -r requirements.txt
 ```
 
-## 💻 Usage
-To verify a mutant:
+## Usage
 
 ```bash
 python3 src/main.py --original benchmarks/sample_p.py --mutant benchmarks/sample_m.py
 ```
 
-## 🧪 Testing
-The testing suite ensures the integrity of the NSEV neuro-symbolic pipeline, focusing on both structural analysis and the self-correction logic.
+Expected result for the sample pair:
 
-#### 1. Run All Tests
-To execute all unit tests within the project, use the following command:
+```text
+VERDICT: Equivalent
+Reason: UNSAT negated equivalence condition
+```
+
+## Tests
+
+Run all unit tests:
 
 ```bash
 python3 -m unittest discover tests
 ```
 
-#### 2. Specific Module Testing
-You can verify individual phases of the framework by running specific test files:
-
-Refinement Engine (Phase 8): Validates the Self-Correction Loop and CEGAR logic.
+Run smoke benchmarks:
 
 ```bash
-python3 -m unittest tests/test_refinement.py
+python3 scripts/run_benchmarks.py
 ```
 
+## Relation to the paper
 
-Structural Analyzer (Phases 2-5 & 7): Ensures correct identification of loops, branches, and function inlining strategies.
+This code is aligned with the paper's revised claims:
 
-```bash
-python3 -m unittest tests/test_analyzer.py
-```
+- LLM output is not treated as a final classification.
+- Preconditions, invariants, summaries, and contracts must be validated before affecting a verdict.
+- SAT produces `Non-equivalent`; UNKNOWN, unsupported translation, or validation failure produces `Indeterminate`.
+- Bounded reasoning is reported separately as `Equivalent under Bound`.
 
-#### 3. Execution Verification
-The test suite validates critical behaviors including:
-
-Syntax Refinement (Phase 8.1): Detecting Z3 syntax errors and generating fix prompts.
-
-Semantic Strengthening (Phase 8.2): Integrating counter-examples into refined prompts.
-
-Selective Inlining (Phase 5): Accurate categorization of function calls into Inlining or Abstraction.
-
-
-## 📊 Experimental Results
-NSEV achieves 100% accuracy on complex mutations with an average verification time of **< 2s**.
-
-## 📜 Citation
-If you use this tool in your research, please cite:
-
-
+The paper reports the full 150-mutant benchmark results. This repository's smoke benchmarks are only executable examples, not a replacement for the full replication package.

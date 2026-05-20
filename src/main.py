@@ -1,73 +1,97 @@
-# src/main.py
-import argparse
-import sys
-import os
+"""Command-line entry point for the NSEV prototype."""
+from __future__ import annotations
 
-# اضافه کردن مسیر جاری به sys.path برای اطمینان از شناسایی پکیج‌ها
+import argparse
+import os
+import sys
+from typing import Optional
+
+# Allow `python src/main.py` without installing the package.
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Clean Imports با استفاده از فایل‌های __init__.py ایجاد شده
-from core import CodeAnalyzer, NSEV_LLM_Client, RefinementEngine
-from solvers.z3_bridge import Z3Bridge
+from core import CodeAnalyzer, NSEV_LLM_Client, RefinementEngine, StaticSemanticLifter, VerificationResult, Verdict
+from solvers import Z3Bridge
 
-def run_nsev_pipeline(orig_path, mut_path):
-    """
-    اجرای کامل خط لوله NSEV بر اساس معماری ارائه شده در فایل arch.pdf.
-    """
-    # بارگذاری کدها
-    with open(orig_path, 'r') as f: orig_code = f.read()
-    with open(mut_path, 'r') as f: mut_code = f.read()
 
-    # ۱. تحلیل ساختاری (Phases 2-5 & 7)
-    analyzer = CodeAnalyzer(orig_code)
-    metadata = analyzer.analyze()
-    print(f"[*] Structural analysis complete: {len(metadata['loops'])} loops detected.")
+def run_nsev_pipeline(orig_path: str, mut_path: str, *, use_llm: bool = False, max_refinements: int = 3) -> VerificationResult:
+    with open(orig_path, "r", encoding="utf-8") as f:
+        orig_code = f.read()
+    with open(mut_path, "r", encoding="utf-8") as f:
+        mut_code = f.read()
 
-    # ۲. آماده‌سازی اجزای هوشمند و صوری
-    llm = NSEV_LLM_Client()
+    original_metadata = CodeAnalyzer(orig_code).analyze()
+    mutant_metadata = CodeAnalyzer(mut_code).analyze()
+    merged_metadata = {
+        "original": original_metadata,
+        "mutant": mutant_metadata,
+        "loops": original_metadata.get("loops", []) + mutant_metadata.get("loops", []),
+    }
+
+    print(f"[*] Structural analysis: {len(merged_metadata['loops'])} loop(s) detected.")
+
     bridge = Z3Bridge()
-    refiner = RefinementEngine(max_budget=5)
+    refiner = RefinementEngine(max_budget=max_refinements)
+    lifter = StaticSemanticLifter()
+    llm = NSEV_LLM_Client()
 
-    # ۳. شروع فاز ۱ (Semantic Lifting)
-    # در صورت وجود حلقه‌های تو در تو، استراتژی فاز ۳ فعال می‌شود
-    if len(metadata['loops']) > 1:
-        current_prompt = llm.generate_nested_loop_prompt(metadata['loops'], orig_code)
-    else:
-        current_prompt = llm.generate_initial_prompt(orig_code, mut_code)
+    lifted = lifter.lift(orig_code, mut_code, merged_metadata)
+    prompt: Optional[str] = None
+    if lifted is None and use_llm:
+        if original_metadata.get("nested_loop_depth", 0) > 1:
+            prompt = llm.generate_nested_loop_prompt(original_metadata.get("loops", []), orig_code)
+        else:
+            prompt = llm.generate_initial_prompt(orig_code, mut_code, context=str(merged_metadata))
+        generated_code = llm.query_model(prompt)
+        if generated_code:
+            lifted = type("Lifted", (), {"code": generated_code})()
 
-    print("--- Starting Neuro-Symbolic Verification Loop ---")
+    if lifted is None:
+        result = VerificationResult(
+            Verdict.INDETERMINATE,
+            reason="unsupported construct or no validated semantic artefact was available",
+            metadata={"analysis": merged_metadata},
+        )
+        _print_result(result)
+        return result
 
-    # ۴. حلقه اصلی تایید و پالایش (Phases 6 & 8)
-    while not refiner.is_budget_exceeded():
-        print(f"[Attempt {refiner.current_attempt + 1}] Generating formal spec...")
-        
-        # Phases 1-5: دریافت مشخصات صوری از مدل زبانی
-        formal_spec = llm.query_model(current_prompt)
-        
-        # Phase 6: اجرای پل صوری و دریافت نتیجه از Z3
-        status, data = bridge.verify(formal_spec)
-        
-        if status == "unsat":
-            print("✅ VERDICT: EQUIVALENT (Mathematically Proven)")
-            return
-        
-        # Phase 8: تحلیل بازخورد و شروع حلقه خوداصلاحی
-        error_log = data if status == "error" else None
-        model = data if status == "sat" else None
-        
-        current_prompt = refiner.analyze_z3_feedback(status, model=model, error_log=error_log)
-        
-        if not current_prompt:
+    result = bridge.verify(lifted.code)
+    # Only validation/unknown errors trigger refinement. SAT is a real Non-equivalent verdict.
+    while result.verdict == Verdict.INDETERMINATE and not refiner.is_budget_exceeded() and use_llm:
+        feedback = refiner.analyze_z3_feedback("validation_failed", error_log=result.reason)
+        if not feedback or prompt is None:
             break
-            
-        print(f"[!] Refinement triggered due to: {status}")
+        generated_code = llm.query_model(llm.generate_refinement_prompt(prompt, feedback))
+        if not generated_code:
+            break
+        result = bridge.verify(generated_code)
 
-    print("❌ VERDICT: INDETERMINATE (Budget exceeded or non-equivalence found)")
+    _print_result(result)
+    return result
+
+
+def _print_result(result: VerificationResult) -> None:
+    icon = {
+        Verdict.EQUIVALENT: "✅",
+        Verdict.EQUIVALENT_UNDER_BOUND: "🟨",
+        Verdict.NON_EQUIVALENT: "❌",
+        Verdict.INDETERMINATE: "⚪",
+    }[result.verdict]
+    print(f"{icon} VERDICT: {result.verdict.value}")
+    if result.reason:
+        print(f"   Reason: {result.reason}")
+    if result.model:
+        print(f"   Counterexample: {result.model}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="NSEV: Neuro-Symbolic Equivalence Verifier")
+    parser.add_argument("--original", required=True, help="Path to original Python file")
+    parser.add_argument("--mutant", required=True, help="Path to mutant Python file")
+    parser.add_argument("--use-llm", action="store_true", help="Enable optional LLM integration if configured")
+    parser.add_argument("--max-refinements", type=int, default=3, help="Phase 8 refinement budget")
+    args = parser.parse_args()
+    run_nsev_pipeline(args.original, args.mutant, use_llm=args.use_llm, max_refinements=args.max_refinements)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="NSEV: Neuro-Symbolic Equivalence Verifier")
-    parser.add_argument("--original", required=True, help="Path to original python file")
-    parser.add_argument("--mutant", required=True, help="Path to mutant python file")
-    
-    args = parser.parse_args()
-    run_nsev_pipeline(args.original, args.mutant)
+    main()
